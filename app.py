@@ -10,6 +10,7 @@ Rotas:
 
 import os
 import sys
+import base64
 from datetime import datetime
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -156,6 +157,27 @@ async def gerar_pdf_api(payload: GmudData):
             "status": "success",
             "filename": filename,
             "download_url": f"/output/{filename}",
+        }
+    )
+
+
+@app.post("/api/gerar-pdf-base64")
+async def gerar_pdf_base64_api(payload: GmudData):
+    """API REST: recebe JSON, gera o PDF e retorna em base64 (útil para Jira Forge)."""
+    data = payload.model_dump()
+    filepath = generate_pdf(data, OUTPUT_DIR)
+    filename = os.path.basename(filepath)
+    
+    with open(filepath, "rb") as f:
+        pdf_bytes = f.read()
+    
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+
+    return JSONResponse(
+        content={
+            "status": "success",
+            "filename": filename,
+            "pdf_base64": pdf_base64,
         }
     )
 
