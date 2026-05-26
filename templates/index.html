@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Gerador de PDF - Plano de Implantação (GMUD)">
+    <title>GMUD - Plano de Implantação</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-glow"></div>
+            <div class="header-content">
+                <div class="logo-area">
+                    <div class="logo-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 id="app-title">Plano de Implantação</h1>
+                        <p class="subtitle">Gerador de GMUD em PDF</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Form -->
+        <form id="gmud-form" action="/gerar-pdf" method="POST">
+            <!-- Seção 1 -->
+            <section class="form-section" id="section-1">
+                <div class="section-header">
+                    <span class="section-number">1</span>
+                    <h2>Identificação da Mudança</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-grid">
+                        <div class="field-group">
+                            <label for="id_interna">ID - Interna</label>
+                            <input type="text" id="id_interna" name="id_interna" placeholder="Ex: GMUD-001">
+                        </div>
+                        <div class="field-group">
+                            <label for="data_documentacao">Data documentação</label>
+                            <input type="date" id="data_documentacao" name="data_documentacao" value="{{ today }}">
+                        </div>
+                        <div class="field-group full-width">
+                            <label for="descricao_mudanca">Descrição Mudança</label>
+                            <input type="text" id="descricao_mudanca" name="descricao_mudanca" placeholder="Descreva brevemente a mudança">
+                        </div>
+                        <div class="field-group">
+                            <label for="solicitante">Solicitante</label>
+                            <input type="text" id="solicitante" name="solicitante" placeholder="Nome do solicitante">
+                        </div>
+                        <div class="field-group">
+                            <label for="responsavel_documento">Responsável pelo Documento</label>
+                            <input type="text" id="responsavel_documento" name="responsavel_documento" placeholder="Nome do responsável">
+                        </div>
+                        <div class="field-group">
+                            <label for="responsavel_tecnico">Responsável Técnico (Desenvolvedor)</label>
+                            <input type="text" id="responsavel_tecnico" name="responsavel_tecnico" placeholder="Nome do desenvolvedor">
+                        </div>
+                        <div class="field-group">
+                            <label for="responsavel_aplicacao">Responsável pela Aplicação da Mudança</label>
+                            <input type="text" id="responsavel_aplicacao" name="responsavel_aplicacao" placeholder="Nome do responsável">
+                        </div>
+                        <div class="field-group">
+                            <label for="cards_jira">Card(s) Jira</label>
+                            <input type="text" id="cards_jira" name="cards_jira" placeholder="Ex: PROJ-123, PROJ-456">
+                        </div>
+                        <div class="field-group">
+                            <label for="pr">PR</label>
+                            <input type="text" id="pr" name="pr" placeholder="Link do Pull Request">
+                        </div>
+                        <div class="field-group">
+                            <label for="versao_anterior">Versão anterior</label>
+                            <input type="text" id="versao_anterior" name="versao_anterior" placeholder="Ex: 1.2.0">
+                        </div>
+                        <div class="field-group">
+                            <label for="versao_atualizada">Versão atualizada</label>
+                            <input type="text" id="versao_atualizada" name="versao_atualizada" placeholder="Ex: 1.3.0">
+                        </div>
+                        <div class="field-group">
+                            <label for="tipo_mudanca">Tipo da Mudança</label>
+                            <select id="tipo_mudanca" name="tipo_mudanca">
+                                <option value="">Selecione...</option>
+                                <option value="Normal">Normal</option>
+                                <option value="Emergencial">Emergencial</option>
+                            </select>
+                        </div>
+                        <div class="field-group">
+                            <label for="classificacao_riscos">Classificação dos Riscos</label>
+                            <select id="classificacao_riscos" name="classificacao_riscos">
+                                <option value="">Selecione...</option>
+                                <option value="Baixo">Baixo</option>
+                                <option value="Médio">Médio</option>
+                                <option value="Alto">Alto</option>
+                                <option value="Crítico">Crítico</option>
+                            </select>
+                        </div>
+                        <div class="field-group full-width">
+                            <label for="interdependencia_merges">Interdependência de Merges (Acusar em Plano de Rollback)</label>
+                            <input type="text" id="interdependencia_merges" name="interdependencia_merges" placeholder="Descreva as interdependências">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Seção 2 -->
+            <section class="form-section" id="section-2">
+                <div class="section-header">
+                    <span class="section-number">2</span>
+                    <h2>Descrição da Mudança</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-group full-width">
+                        <label for="objetivo_alteracao">Objetivo da Alteração</label>
+                        <textarea id="objetivo_alteracao" name="objetivo_alteracao" rows="6" placeholder="Descreva o objetivo da alteração..."></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Seção 3 -->
+            <section class="form-section" id="section-3">
+                <div class="section-header">
+                    <span class="section-number">3</span>
+                    <h2>Ambiente e Impactos</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-group full-width">
+                        <label for="sistemas_servidores">Sistemas e Servidores Envolvidos</label>
+                        <textarea id="sistemas_servidores" name="sistemas_servidores" rows="4" placeholder="Liste os sistemas e servidores..."></textarea>
+                    </div>
+                    <div class="field-group full-width">
+                        <label for="impactos_previstos">Impactos Previstos</label>
+                        <textarea id="impactos_previstos" name="impactos_previstos" rows="4" placeholder="Descreva os impactos previstos..."></textarea>
+                    </div>
+                    <div class="field-group">
+                        <label for="tempo_indisponibilidade">Tempo de Indisponibilidade</label>
+                        <input type="text" id="tempo_indisponibilidade" name="tempo_indisponibilidade" placeholder="Ex: 5min a 10min" value="5min a 10min">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Seção 4 -->
+            <section class="form-section" id="section-4">
+                <div class="section-header">
+                    <span class="section-number">4</span>
+                    <h2>Escopo Técnico</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-group full-width">
+                        <label for="escopo_tecnico">Escopo técnico Aplicado</label>
+                        <textarea id="escopo_tecnico" name="escopo_tecnico" rows="5" placeholder="Descreva o escopo técnico..."></textarea>
+                    </div>
+                    <div class="field-group full-width">
+                        <label for="regras_aplicadas">Regras aplicadas</label>
+                        <textarea id="regras_aplicadas" name="regras_aplicadas" rows="4" placeholder="Descreva as regras aplicadas..."></textarea>
+                    </div>
+                    <div class="field-group full-width">
+                        <label for="alteracoes_estruturas">Alterações em estruturas</label>
+                        <textarea id="alteracoes_estruturas" name="alteracoes_estruturas" rows="5" placeholder="Descreva alterações em banco de dados, tabelas, etc..."></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Seção 5 -->
+            <section class="form-section" id="section-5">
+                <div class="section-header">
+                    <span class="section-number">5</span>
+                    <h2>Plano de Implementação</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-group full-width">
+                        <label for="plano_implementacao">Passos de Implementação</label>
+                        <textarea id="plano_implementacao" name="plano_implementacao" rows="10" placeholder="1. Realizar merge do PR...&#10;2. Executar deploy...&#10;3. Validar endpoints..."></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Seção 6 -->
+            <section class="form-section" id="section-6">
+                <div class="section-header">
+                    <span class="section-number">6</span>
+                    <h2>Plano de Rollback</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-group full-width">
+                        <label for="plano_rollback">Passos de Rollback</label>
+                        <textarea id="plano_rollback" name="plano_rollback" rows="10" placeholder="1. Reverter merge...&#10;2. Restaurar versão anterior...&#10;3. Verificar estabilidade..."></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Seção 7 -->
+            <section class="form-section" id="section-7">
+                <div class="section-header">
+                    <span class="section-number">7</span>
+                    <h2>Validação após mudança</h2>
+                </div>
+                <div class="section-body">
+                    <div class="field-group full-width">
+                        <label for="validacao_pos_mudanca">Validações</label>
+                        <textarea id="validacao_pos_mudanca" name="validacao_pos_mudanca" rows="8" placeholder="1. Testar endpoint X...&#10;2. Verificar logs...&#10;3. Monitorar métricas..."></textarea>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Submit -->
+            <div class="submit-area">
+                <button type="submit" id="submit-btn" class="btn-submit">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                    Gerar PDF
+                </button>
+                <button type="button" id="clear-btn" class="btn-clear" onclick="clearForm()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    Limpar
+                </button>
+            </div>
+        </form>
+
+        <!-- Toast notification -->
+        <div id="toast" class="toast hidden">
+            <div class="toast-icon">✓</div>
+            <div class="toast-msg">PDF gerado com sucesso!</div>
+        </div>
+    </div>
+
+    <script>
+        // Animate sections on scroll
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.form-section').forEach(section => {
+            observer.observe(section);
+        });
+
+        function clearForm() {
+            document.getElementById('gmud-form').reset();
+        }
+
+        // Loading state on submit
+        document.getElementById('gmud-form').addEventListener('submit', function() {
+            const btn = document.getElementById('submit-btn');
+            btn.innerHTML = `
+                <div class="spinner"></div>
+                Gerando PDF...
+            `;
+            btn.disabled = true;
+            btn.classList.add('loading');
+        });
+    </script>
+</body>
+</html>
