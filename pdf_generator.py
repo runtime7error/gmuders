@@ -5,6 +5,7 @@ Usa ReportLab canvas para controle pixel-perfect.
 """
 
 import os
+import io
 from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -95,18 +96,20 @@ def _draw_wrapped_text(c, text, x, y, font, size, max_width, line_height, max_li
     return cur_y
 
 
-def generate_pdf(data: dict, output_dir: str = "output") -> str:
-    """Gera PDF do Plano de Implantação — 1 página A4 vertical, layout idêntico ao Excel."""
-    os.makedirs(output_dir, exist_ok=True)
-
+def generate_pdf(data: dict, output_dir: str = None) -> tuple:
+    """Gera PDF do Plano de Implantação — 1 página A4 vertical, layout idêntico ao Excel.
+    
+    Retorna uma tupla (filename, pdf_bytes) com o nome do arquivo e os bytes do PDF.
+    O PDF é gerado em memória e NÃO é salvo em disco.
+    """
     font_regular, font_bold = _register_fonts()
 
     id_interna = data.get("id_interna", "SEM_ID").replace(" ", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"GMUD_{id_interna}_{timestamp}.pdf"
-    filepath = os.path.join(output_dir, filename)
 
-    c = canvas.Canvas(filepath, pagesize=A4)
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
 
     # ── Margens e dimensões ──────────────────────────────────────────
     MARGIN_L = 12 * mm
@@ -420,4 +423,6 @@ def generate_pdf(data: dict, output_dir: str = "output") -> str:
                        FULL_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec7_rows)
 
     c.save()
-    return filepath
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+    return filename, pdf_bytes

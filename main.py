@@ -18,14 +18,6 @@ def open_browser():
 
 
 def main():
-    # Garantir que o diretório output exista ao lado do executável
-    if getattr(sys, 'frozen', False):
-        exe_dir = os.path.dirname(sys.executable)
-    else:
-        exe_dir = os.path.dirname(os.path.abspath(__file__))
-
-    os.makedirs(os.path.join(exe_dir, "output"), exist_ok=True)
-
     print("=" * 50)
     print("  GMUD - Gerador de Plano de Implantação")
     print("  Acesse: http://localhost:8000")

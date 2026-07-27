@@ -4,18 +4,20 @@ App FastAPI - Gerador de PDF Plano de Implantação (GMUD)
 Rotas:
   GET  /                 → Formulário web
   POST /gerar-pdf        → Submissão do formulário (form-data)
-  POST /api/gerar-pdf    → API REST (JSON)
-  GET  /output/{file}    → Download do PDF gerado
+  POST /api/gerar-pdf    → API REST (JSON) — retorna PDF como download
+  POST /api/gerar-pdf-base64 → API REST (JSON) — retorna PDF em base64
 """
 
 import os
 import sys
+import io
 import base64
 from datetime import datetime
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
@@ -23,16 +25,20 @@ from pdf_generator import generate_pdf
 
 app = FastAPI(title="GMUD - Gerador de Plano de Implantação")
 
+# CORS - permite requisições externas (Ngrok, Rovo, etc.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Quando empacotado com PyInstaller, os assets ficam em sys._MEIPASS
-# O output fica sempre ao lado do executável (não dentro do temp)
 if getattr(sys, 'frozen', False):
     BUNDLE_DIR = sys._MEIPASS
-    EXE_DIR = os.path.dirname(sys.executable)
 else:
     BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
-    EXE_DIR = BUNDLE_DIR
-
-OUTPUT_DIR = os.path.join(EXE_DIR, "output")
 
 app.mount("/static", StaticFiles(directory=os.path.join(BUNDLE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BUNDLE_DIR, "templates"))
@@ -106,7 +112,7 @@ async def gerar_pdf_form(
     plano_rollback: str = Form(""),
     validacao_pos_mudanca: str = Form(""),
 ):
-    """Recebe dados do formulário web e gera o PDF."""
+    """Recebe dados do formulário web e gera o PDF em memória."""
     data = {
         "id_interna": id_interna,
         "data_documentacao": data_documentacao,
@@ -134,30 +140,25 @@ async def gerar_pdf_form(
         "validacao_pos_mudanca": validacao_pos_mudanca,
     }
 
-    filepath = generate_pdf(data, OUTPUT_DIR)
-    filename = os.path.basename(filepath)
+    filename, pdf_bytes = generate_pdf(data)
 
-    return FileResponse(
-        filepath,
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        filename=filename,
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
 @app.post("/api/gerar-pdf")
 async def gerar_pdf_api(payload: GmudData):
-    """API REST: recebe JSON e gera o PDF."""
+    """API REST: recebe JSON e retorna o PDF como download direto."""
     data = payload.model_dump()
-    filepath = generate_pdf(data, OUTPUT_DIR)
-    filename = os.path.basename(filepath)
+    filename, pdf_bytes = generate_pdf(data)
 
-    return JSONResponse(
-        content={
-            "status": "success",
-            "filename": filename,
-            "download_url": f"/output/{filename}",
-        }
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -165,12 +166,8 @@ async def gerar_pdf_api(payload: GmudData):
 async def gerar_pdf_base64_api(payload: GmudData):
     """API REST: recebe JSON, gera o PDF e retorna em base64 (útil para Jira Forge)."""
     data = payload.model_dump()
-    filepath = generate_pdf(data, OUTPUT_DIR)
-    filename = os.path.basename(filepath)
-    
-    with open(filepath, "rb") as f:
-        pdf_bytes = f.read()
-    
+    filename, pdf_bytes = generate_pdf(data)
+
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
     return JSONResponse(
@@ -181,18 +178,3 @@ async def gerar_pdf_base64_api(payload: GmudData):
         }
     )
 
-
-@app.get("/output/{filename}")
-async def download_pdf(filename: str):
-    """Serve o PDF gerado para download."""
-    filepath = os.path.join(OUTPUT_DIR, filename)
-    if not os.path.exists(filepath):
-        return JSONResponse(
-            status_code=404,
-            content={"status": "error", "message": "Arquivo não encontrado"},
-        )
-    return FileResponse(
-        filepath,
-        media_type="application/pdf",
-        filename=filename,
-    )

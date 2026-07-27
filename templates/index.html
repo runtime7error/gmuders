@@ -34,6 +34,44 @@
             </div>
         </header>
 
+        <!-- Seção de Importação JSON -->
+        <section class="form-section visible" id="section-json-import">
+            <div class="section-header json-section-header" onclick="toggleJsonSection()">
+                <span class="section-number" style="background: linear-gradient(135deg, #a78bfa, #7c3aed);">⚡</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <h2>Preenchimento Rápido via JSON</h2>
+                    <svg class="json-chevron" id="json-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="json-body-container" id="json-section-body">
+                <div class="field-group full-width">
+                    <label for="json-input">Cole o JSON contendo os dados da GMUD para preencher os campos automaticamente:</label>
+                    <textarea id="json-input" rows="6" placeholder='Exemplo:&#10;{&#10;  "id_interna": "GMUD-2026",&#10;  "solicitante": "Nome do Solicitante",&#10;  "descricao_mudanca": "Minha alteração no sistema",&#10;  "tipo_mudanca": "Normal",&#10;  "classificacao_riscos": "Médio"&#10;}' style="font-family: monospace; font-size: 0.85rem; letter-spacing: 0.03em;"></textarea>
+                </div>
+                <div style="display: flex; gap: 12px; margin-top: 14px;">
+                    <button type="button" class="btn-submit btn-json-import" onclick="importJson()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="8.5" cy="7" r="4"/>
+                            <line x1="20" y1="8" x2="20" y2="14"/>
+                            <line x1="23" y1="11" x2="17" y2="11"/>
+                        </svg>
+                        Preencher Campos
+                    </button>
+                    <button type="button" class="btn-clear" onclick="clearJsonInput()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                        Limpar JSON
+                    </button>
+                </div>
+                <div id="json-error" class="json-error-msg"></div>
+            </div>
+        </section>
+
         <!-- Form -->
         <form id="gmud-form" action="/gerar-pdf" method="POST">
             <!-- Seção 1 -->
@@ -270,6 +308,143 @@
             btn.disabled = true;
             btn.classList.add('loading');
         });
+
+        // Functions for JSON Import
+        function toggleJsonSection() {
+            const body = document.getElementById('json-section-body');
+            const chevron = document.getElementById('json-chevron');
+            body.classList.toggle('expanded');
+            chevron.classList.toggle('rotated');
+        }
+
+        function clearJsonInput() {
+            document.getElementById('json-input').value = '';
+            const errorDiv = document.getElementById('json-error');
+            errorDiv.style.display = 'none';
+            errorDiv.innerText = '';
+        }
+
+        function importJson() {
+            const jsonText = document.getElementById('json-input').value.trim();
+            const errorDiv = document.getElementById('json-error');
+            
+            errorDiv.style.display = 'none';
+            errorDiv.innerText = '';
+
+            if (!jsonText) {
+                errorDiv.innerText = 'Por favor, cole um JSON válido.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const data = JSON.parse(jsonText);
+                
+                // Keep track of filled fields for success count/reporting
+                let filledCount = 0;
+                let ignoredKeys = [];
+
+                for (const key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        const val = data[key];
+                        const element = document.getElementById(key);
+
+                        if (element) {
+                            if (element.tagName === 'SELECT') {
+                                // Find if option exists, otherwise log it or select first/exact
+                                const options = Array.from(element.options).map(o => o.value);
+                                if (options.includes(val)) {
+                                    element.value = val;
+                                    filledCount++;
+                                } else {
+                                    // Try case insensitive or exact match
+                                    const match = Array.from(element.options).find(o => o.value.toLowerCase() === String(val).toLowerCase());
+                                    if (match) {
+                                        element.value = match.value;
+                                        filledCount++;
+                                    } else {
+                                        ignoredKeys.push(`${key} (valor '${val}' inválido para seleção)`);
+                                    }
+                                }
+                            } else if (element.type === 'date') {
+                                // Validate format is yyyy-MM-dd
+                                if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                                    element.value = val;
+                                    filledCount++;
+                                } else {
+                                    // Try parsing date if possible or just assign it
+                                    try {
+                                        const parsedDate = new Date(val);
+                                        if (!isNaN(parsedDate.getTime())) {
+                                            element.value = parsedDate.toISOString().split('T')[0];
+                                            filledCount++;
+                                        } else {
+                                            ignoredKeys.push(`${key} (data inválida)`);
+                                        }
+                                    } catch (e) {
+                                        ignoredKeys.push(`${key} (data inválida)`);
+                                    }
+                                }
+                            } else {
+                                element.value = val;
+                                filledCount++;
+                            }
+                        } else {
+                            ignoredKeys.push(key);
+                        }
+                    }
+                }
+
+                // Show Toast Notification
+                showToast(filledCount, ignoredKeys);
+                
+                if (ignoredKeys.length > 0) {
+                    errorDiv.innerHTML = `<strong>Aviso:</strong> ${filledCount} campos preenchidos. Chaves ignoradas ou inválidas: <br>${ignoredKeys.join(', ')}`;
+                    errorDiv.style.color = '#eab308'; // Amber/warning color
+                    errorDiv.style.background = 'rgba(234, 179, 8, 0.08)';
+                    errorDiv.style.borderColor = 'rgba(234, 179, 8, 0.2)';
+                    errorDiv.style.display = 'block';
+                } else {
+                    // Collapse section on success after 1.2 seconds
+                    setTimeout(() => {
+                        const body = document.getElementById('json-section-body');
+                        const chevron = document.getElementById('json-chevron');
+                        if (body.classList.contains('expanded')) {
+                            body.classList.remove('expanded');
+                            chevron.classList.remove('rotated');
+                        }
+                    }, 1200);
+                }
+
+            } catch (e) {
+                errorDiv.innerHTML = `<strong>Erro de sintaxe JSON:</strong> ${e.message}`;
+                errorDiv.style.color = '#ff6b6b';
+                errorDiv.style.background = 'rgba(255, 107, 107, 0.08)';
+                errorDiv.style.borderColor = 'rgba(255, 107, 107, 0.2)';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        function showToast(filledCount, ignoredKeys) {
+            const toast = document.getElementById('toast');
+            const toastMsg = toast.querySelector('.toast-msg');
+            const toastIcon = toast.querySelector('.toast-icon');
+
+            if (filledCount > 0) {
+                toastIcon.innerText = '✓';
+                toastIcon.style.background = '#22c55e';
+                toastMsg.innerText = `${filledCount} campos preenchidos com sucesso!`;
+            } else {
+                toastIcon.innerText = '⚠';
+                toastIcon.style.background = '#eab308';
+                toastMsg.innerText = 'Nenhum campo correspondente encontrado no JSON.';
+            }
+
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 4000);
+        }
     </script>
 </body>
 </html>
