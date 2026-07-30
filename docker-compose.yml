@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  gmuders-api:
+    build: .
+    image: gmuders-api:latest
+    container_name: gmuders-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
