@@ -30,6 +30,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/gmuders-api:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/gmuders-api:homolog
-            ${{ secrets.DOCKERHUB_USERNAME }}/gmuders-api:${{ github.sha }}
+            fireblaster223/gmuders:latest
+            fireblaster223/gmuders:homolog
+            fireblaster223/gmuders:${{ github.sha }}
