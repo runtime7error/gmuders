@@ -298,15 +298,54 @@
             document.getElementById('gmud-form').reset();
         }
 
-        // Loading state on submit
-        document.getElementById('gmud-form').addEventListener('submit', function() {
+        // Loading state and AJAX submit to download file without locking button
+        document.getElementById('gmud-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
             const btn = document.getElementById('submit-btn');
+            const originalContent = btn.innerHTML;
+
             btn.innerHTML = `
                 <div class="spinner"></div>
                 Gerando PDF...
             `;
             btn.disabled = true;
             btn.classList.add('loading');
+
+            try {
+                const formData = new FormData(this);
+                const response = await fetch('/gerar-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Falha ao gerar o PDF');
+                }
+
+                const disposition = response.headers.get('Content-Disposition');
+                let filename = 'GMUD.pdf';
+                if (disposition && disposition.includes('filename=')) {
+                    filename = disposition.split('filename=')[1].replace(/["']/g, '');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+
+                showToast(1, []);
+            } catch (err) {
+                alert('Erro ao gerar PDF: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+                btn.innerHTML = originalContent;
+            }
         });
 
         // Functions for JSON Import
