@@ -228,6 +228,7 @@ label {
 
 /* ── Inputs & Textareas ─────────────────────────────────────────── */
 input[type="text"],
+input[type="email"],
 input[type="date"],
 select,
 textarea {
@@ -244,11 +245,13 @@ textarea {
 }
 
 input[type="text"]::placeholder,
+input[type="email"]::placeholder,
 textarea::placeholder {
     color: var(--text-muted);
 }
 
 input[type="text"]:hover,
+input[type="email"]:hover,
 input[type="date"]:hover,
 select:hover,
 textarea:hover {
@@ -257,6 +260,7 @@ textarea:hover {
 }
 
 input[type="text"]:focus,
+input[type="email"]:focus,
 input[type="date"]:focus,
 select:focus,
 textarea:focus {

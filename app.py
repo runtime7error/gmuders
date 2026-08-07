@@ -72,6 +72,9 @@ class GmudData(BaseModel):
     plano_implementacao: Optional[str] = ""
     plano_rollback: Optional[str] = ""
     validacao_pos_mudanca: Optional[str] = ""
+    data_implementacao: Optional[str] = ""
+    departamento: Optional[str] = ""
+    email: Optional[str] = ""
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +114,9 @@ async def gerar_pdf_form(
     plano_implementacao: str = Form(""),
     plano_rollback: str = Form(""),
     validacao_pos_mudanca: str = Form(""),
+    data_implementacao: str = Form(""),
+    departamento: str = Form(""),
+    email: str = Form(""),
 ):
     """Recebe dados do formulário web e gera o PDF em memória."""
     data = {
@@ -138,6 +144,9 @@ async def gerar_pdf_form(
         "plano_implementacao": plano_implementacao,
         "plano_rollback": plano_rollback,
         "validacao_pos_mudanca": validacao_pos_mudanca,
+        "data_implementacao": data_implementacao,
+        "departamento": departamento,
+        "email": email,
     }
 
     filename, pdf_bytes = generate_pdf(data)
@@ -177,4 +186,10 @@ async def gerar_pdf_base64_api(payload: GmudData):
             "pdf_base64": pdf_base64,
         }
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+
 
