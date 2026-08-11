@@ -1,7 +1,7 @@
 """
 Gerador de PDF - Plano de Implantação (GMUD)
-Reproduz EXATAMENTE o layout do Excel em 1 única página A4 vertical.
-Usa ReportLab canvas para controle pixel-perfect.
+Utiliza ReportLab Platypus com Padding de Linhas para manter o visual Excel 
+mas suportar perfeitamente paginação infinita.
 """
 
 import os
@@ -10,24 +10,22 @@ from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.pdfgen import canvas
 
 # ── Cores (Excel theme colors) ──────────────────────────────────────────
-HEADER_BG = colors.HexColor("#44546A")      # theme=3, tint=-0.25 → azul escuro
-LABEL_BG = colors.HexColor("#B4C6E7")       # theme=4, tint=0.60 → azul médio
-VALUE_BG = colors.HexColor("#D6E4F0")       # theme=4, tint=0.80 → azul claro
+HEADER_BG = colors.HexColor("#44546A")
+LABEL_BG = colors.HexColor("#B4C6E7")
+VALUE_BG = colors.HexColor("#D6E4F0")
 WHITE = colors.white
 BLACK = colors.black
 BORDER_COLOR = colors.HexColor("#333F50")
 
-PAGE_W, PAGE_H = A4  # 595.27 x 841.89 pts
-
-
 def _register_fonts():
-    """Registra Calibri se disponível, senão usa Helvetica."""
     try:
         c_path = r"C:\Windows\Fonts\calibri.ttf"
         cb_path = r"C:\Windows\Fonts\calibrib.ttf"
@@ -38,32 +36,6 @@ def _register_fonts():
     except Exception:
         pass
     return "Helvetica", "Helvetica-Bold"
-
-
-def _draw_rect(c, x, y, w, h, fill_color, border=True, border_weight=0.6):
-    """Desenha retângulo preenchido com borda opcional."""
-    c.setFillColor(fill_color)
-    c.rect(x, y, w, h, fill=1, stroke=0)
-    if border:
-        c.setStrokeColor(BORDER_COLOR)
-        c.setLineWidth(border_weight)
-        c.rect(x, y, w, h, fill=0, stroke=1)
-
-
-def _draw_text(c, text, x, y, font, size, color=BLACK, max_width=None):
-    """Desenha texto simples. Retorna a largura usada."""
-    c.setFont(font, size)
-    c.setFillColor(color)
-    if max_width:
-        # Trunca se necessário
-        while c.stringWidth(text, font, size) > max_width and len(text) > 1:
-            text = text[:-1]
-        if c.stringWidth(text + "...", font, size) <= max_width or len(text) < 3:
-            pass
-        else:
-            text = text + "..."
-    c.drawString(x, y, text)
-
 
 def _get_wrapped_lines(c, text, font, size, max_width):
     c.setFont(font, size)
@@ -87,24 +59,7 @@ def _get_wrapped_lines(c, text, font, size, max_width):
         lines.append(current_line)
     return lines
 
-
-def _draw_wrapped_text(c, text, x, y, font, size, max_width, line_height, max_lines=50):
-    """Desenha texto com quebra de linha. Retorna y final."""
-    lines = _get_wrapped_lines(c, text, font, size, max_width)
-    c.setFillColor(BLACK)
-    cur_y = y
-    for i, line in enumerate(lines[:max_lines]):
-        c.drawString(x, cur_y, line)
-        cur_y -= line_height
-    return cur_y
-
-
 def generate_pdf(data: dict, output_dir: str = None) -> tuple:
-    """Gera PDF do Plano de Implantação — 1 página A4 vertical, layout idêntico ao Excel.
-    
-    Retorna uma tupla (filename, pdf_bytes) com o nome do arquivo e os bytes do PDF.
-    O PDF é gerado em memória e NÃO é salvo em disco.
-    """
     font_regular, font_bold = _register_fonts()
 
     id_interna = data.get("id_interna", "SEM_ID").replace(" ", "_")
@@ -112,327 +67,223 @@ def generate_pdf(data: dict, output_dir: str = None) -> tuple:
     filename = f"GMUD_{id_interna}_{timestamp}.pdf"
 
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-
-    # ── Margens e dimensões ──────────────────────────────────────────
+    
+    # Margens
     MARGIN_L = 12 * mm
     MARGIN_R = 12 * mm
     MARGIN_T = 8 * mm
     MARGIN_B = 8 * mm
 
-    FULL_W = PAGE_W - MARGIN_L - MARGIN_R     # largura total do conteúdo
-    COL_A_W = FULL_W * 0.34                     # coluna label (~34%)
-    COL_B_W = FULL_W - COL_A_W                  # coluna valor (~66%)
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=MARGIN_R,
+        leftMargin=MARGIN_L,
+        topMargin=MARGIN_T,
+        bottomMargin=MARGIN_B
+    )
 
-    HEADER_H = 14                               # altura cabeçalho de seção
-    ROW_H = 11                                  # altura de linha label/valor
-    TEXTAREA_ROW_H = 9.5                        # altura linha em textarea
-    SECTION_GAP = 2                             # espaço entre seções
-    TEXT_OFFSET_X = 3                            # padding horizontal do texto
-    TEXT_OFFSET_Y = 3                            # padding vertical do texto (de baixo)
-    HEADER_FONT_SIZE = 10
-    LABEL_FONT_SIZE = 7
-    VALUE_FONT_SIZE = 7
-    LINE_H = 8                                  # line height para wrapped text
+    FULL_W = A4[0] - MARGIN_L - MARGIN_R
+    COL_A_W = FULL_W * 0.34
+    COL_B_W = FULL_W - COL_A_W
 
-    x0 = MARGIN_L
-    y = PAGE_H - MARGIN_T  # topo da página
+    styles = getSampleStyleSheet()
+    
+    style_header = ParagraphStyle(
+        'HeaderStyle',
+        parent=styles['Normal'],
+        fontName=font_bold,
+        fontSize=10,
+        textColor=WHITE,
+        alignment=TA_CENTER,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+
+    style_label = ParagraphStyle(
+        'LabelStyle',
+        parent=styles['Normal'],
+        fontName=font_bold,
+        fontSize=7.5,
+        textColor=BLACK,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
+
+    style_value = ParagraphStyle(
+        'ValueStyle',
+        parent=styles['Normal'],
+        fontName=font_regular,
+        fontSize=7.5,
+        textColor=BLACK,
+        alignment=TA_LEFT,
+        spaceBefore=0,
+        spaceAfter=0,
+    )
 
     def _format_date_br(date_str: str) -> str:
-        """Converte data de yyyy-mm-dd para dd/mm/yyyy (padrão brasileiro)."""
         if not date_str:
             return ""
-        # Tenta vários formatos comuns
-        for fmt_in, fmt_out in [
-            ("%Y-%m-%d", "%d/%m/%Y"),
-            ("%d/%m/%Y", "%d/%m/%Y"),   # já no formato correto
-            ("%d-%m-%Y", "%d/%m/%Y"),
-        ]:
+        for fmt_in, fmt_out in [("%Y-%m-%d", "%d/%m/%Y"), ("%d/%m/%Y", "%d/%m/%Y"), ("%d-%m-%Y", "%d/%m/%Y")]:
             try:
                 return datetime.strptime(date_str, fmt_in).strftime(fmt_out)
             except ValueError:
                 continue
-        return date_str  # retorna como está se não conseguir converter
+        return date_str
 
-    def get(key, default=""):
-        val = data.get(key, default) or ""
+    # Dummy canvas to measure text lines accurately
+    temp_canvas = canvas.Canvas(io.BytesIO())
+    
+    def get_padded_text(key, min_lines, width, is_label=False):
+        """Busca o texto e preenche com <br/> para atingir o min_lines garantindo o tamanho da caixa"""
+        val = data.get(key, "") if key else ""
         if key == "data_documentacao":
             val = _format_date_br(val)
-        return val
+            
+        val = str(val)
+        font = font_bold if is_label else font_regular
+        size = 7.5
+        
+        # O padding de cada lado na tabela é 3. Então width real = width - 6
+        real_w = width - 6
+        lines = _get_wrapped_lines(temp_canvas, val, font, size, real_w)
+        num_lines = len(lines)
+        
+        val_html = val.replace('\n', '<br/>')
+        if num_lines < min_lines:
+            extra = min_lines - num_lines
+            # Adicionamos espaços em branco (br)
+            val_html += "<br/>" * extra
+            
+        return val_html
+
+    def make_paragraph(text, style):
+        if not text:
+            return Paragraph("", style)
+        return Paragraph(text, style)
+
+    elements = []
+    
+    def add_section_header(title):
+        data_table = [[Paragraph(title, style_header)]]
+        t = Table(data_table, colWidths=[FULL_W])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, 0), HEADER_BG),
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
+            ('BOX', (0, 0), (0, 0), 1, BORDER_COLOR),
+            ('TOPPADDING', (0, 0), (0, 0), 3),
+            ('BOTTOMPADDING', (0, 0), (0, 0), 3),
+        ]))
+        elements.append(t)
 
     # ═══════════════════════════════════════════════════════════════════
     # SEÇÃO 1: Identificação da Mudança
     # ═══════════════════════════════════════════════════════════════════
-    # Header (merged A:B)
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("1. Identificação da Mudança", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "1. Identificação da Mudança")
+    add_section_header("1. Identificação da Mudança")
 
-    # 14 linhas de label/valor
     sec1_fields = [
-        ("ID - Interna", get("id_interna")),
-        ("Data documentação", get("data_documentacao")),
-        ("Descrição Mudança", get("descricao_mudanca")),
-        ("Solicitante", get("solicitante")),
-        ("Responsável pelo Documento", get("responsavel_documento")),
-        ("Responsável Técnico (Desenvolvedor)", get("responsavel_tecnico")),
-        ("Responsável pela Aplicação da Mudança", get("responsavel_aplicacao")),
-        ("Card(s) Jira", get("cards_jira")),
-        ("Versão anterior", get("versao_anterior")),
-        ("Versão atualizada", get("versao_atualizada")),
-        ("Tipo da Mudança", get("tipo_mudanca")),
-        ("Classificação dos Riscos", get("classificacao_riscos")),
-        ("PR", get("pr")),
-        ("Interdependência de Merges", get("interdependencia_merges")),
+        ("ID - Interna", "id_interna"),
+        ("Data documentação", "data_documentacao"),
+        ("Descrição Mudança", "descricao_mudanca"),
+        ("Solicitante", "solicitante"),
+        ("Responsável pelo Documento", "responsavel_documento"),
+        ("Responsável Técnico (Desenvolvedor)", "responsavel_tecnico"),
+        ("Responsável pela Aplicação da Mudança", "responsavel_aplicacao"),
+        ("Card(s) Jira", "cards_jira"),
+        ("Versão anterior", "versao_anterior"),
+        ("Versão atualizada", "versao_atualizada"),
+        ("Tipo da Mudança", "tipo_mudanca"),
+        ("Classificação dos Riscos", "classificacao_riscos"),
+        ("PR", "pr"),
+        ("Interdependência de Merges", "interdependencia_merges"),
     ]
-
-    for label, value in sec1_fields:
-        val_lines = _get_wrapped_lines(c, value, font_regular, VALUE_FONT_SIZE, COL_B_W - 2 * TEXT_OFFSET_X)
-        lbl_lines = _get_wrapped_lines(c, label, font_bold, LABEL_FONT_SIZE, COL_A_W - 2 * TEXT_OFFSET_X)
+    
+    sec1_data = []
+    for label, key in sec1_fields:
+        val = get_padded_text(key, min_lines=1, width=COL_B_W)
+        # Para os labels da seçao 1 mantemos originais pois nao tem padding fixo superior a 1
+        sec1_data.append([make_paragraph(label, style_label), make_paragraph(val, style_value)])
         
-        num_lines = max(1, max(len(val_lines), len(lbl_lines)))
-        dynamic_row_h = num_lines * LINE_H + (ROW_H - LINE_H)
-        
-        y -= dynamic_row_h
-        
-        # Label cell
-        _draw_rect(c, x0, y, COL_A_W, dynamic_row_h, LABEL_BG)
-        _draw_wrapped_text(c, label, x0 + TEXT_OFFSET_X, y + dynamic_row_h - ROW_H + TEXT_OFFSET_Y,
-                           font_bold, LABEL_FONT_SIZE, COL_A_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=num_lines)
-        # Value cell
-        _draw_rect(c, x0 + COL_A_W, y, COL_B_W, dynamic_row_h, VALUE_BG)
-        _draw_wrapped_text(c, value, x0 + COL_A_W + TEXT_OFFSET_X, y + dynamic_row_h - ROW_H + TEXT_OFFSET_Y,
-                           font_regular, VALUE_FONT_SIZE, COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=num_lines)
+    t1 = Table(sec1_data, colWidths=[COL_A_W, COL_B_W])
+    t1.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), LABEL_BG),
+        ('BACKGROUND', (1, 0), (1, -1), VALUE_BG),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('GRID', (0, 0), (-1, -1), 1, BORDER_COLOR),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+    ]))
+    elements.append(t1)
+    elements.append(Spacer(1, 4))
 
-    y -= SECTION_GAP
+    def add_field_row(label, value_key, min_lines):
+        val = get_padded_text(value_key, min_lines, width=COL_B_W)
+        # We pad the label side so the row itself forces the height
+        lbl_html = label + ("<br/>" * max(0, min_lines - 1))
+        return [make_paragraph(lbl_html, style_label), make_paragraph(val, style_value)]
 
-    # ═══════════════════════════════════════════════════════════════════
-    # SEÇÃO 2: Descrição da Mudança
-    # ═══════════════════════════════════════════════════════════════════
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("2. Descrição da Mudança", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "2. Descrição da Mudança")
+    def draw_table(table_data):
+        t = Table(table_data, colWidths=[COL_A_W, COL_B_W])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), LABEL_BG),
+            ('BACKGROUND', (1, 0), (1, -1), VALUE_BG),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 1, BORDER_COLOR),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 4))
 
-    # Label row (merged A:B no Excel, mas aqui Label na A, Valor na B)
-    # No Excel: A18:A23 merged (label), B18:B23 são linhas de valor
-    # Vamos reproduzir: label na esquerda (merged verticalmente), valor à direita
-    sec2_rows = 5
-    block_h = sec2_rows * TEXTAREA_ROW_H
-    y -= block_h
+    def draw_full_width_table(value_key, min_lines):
+        val = get_padded_text(value_key, min_lines, width=FULL_W)
+        t = Table([[make_paragraph(val, style_value)]], colWidths=[FULL_W])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), VALUE_BG),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 1, BORDER_COLOR),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('LEFTPADDING', (0, 0), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 4))
 
-    # Label cell (col A, altura total do bloco)
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    label_y = y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y
-    c.drawString(x0 + TEXT_OFFSET_X, label_y, "Objetivo da Alteração")
+    add_section_header("2. Descrição da Mudança")
+    draw_table([add_field_row("Objetivo da Alteração", "objetivo_alteracao", 5)])
 
-    # Value cell (col B, altura total do bloco)
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("objetivo_alteracao"),
-                       x0 + COL_A_W + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec2_rows)
+    add_section_header("3. Ambiente e Impactos")
+    draw_table([
+        add_field_row("Sistemas e Servidores Envolvidos", "sistemas_servidores", 4),
+        add_field_row("Impactos Previstos", "impactos_previstos", 3),
+        add_field_row("Tempo de Indisponibilidade", "tempo_indisponibilidade", 2)
+    ])
 
-    y -= SECTION_GAP
+    add_section_header("4. Escopo Técnico")
+    draw_table([
+        add_field_row("Escopo técnico Aplicado", "escopo_tecnico", 5),
+        add_field_row("Regras aplicadas", "regras_aplicadas", 2),
+        add_field_row("Alterações em estruturas", "alteracoes_estruturas", 5)
+    ])
 
-    # ═══════════════════════════════════════════════════════════════════
-    # SEÇÃO 3: Ambiente e Impactos
-    # ═══════════════════════════════════════════════════════════════════
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("3. Ambiente e Impactos", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "3. Ambiente e Impactos")
+    add_section_header("5. Plano de Implementação")
+    draw_full_width_table("plano_implementacao", 12)
 
-    # Sistemas e Servidores Envolvidos (A27:A31 merged label, B27:B31 values)
-    sec3a_rows = 4
-    block_h = sec3a_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + TEXT_OFFSET_X, y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 "Sistemas e Servidores Envolvidos")
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("sistemas_servidores"),
-                       x0 + COL_A_W + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec3a_rows)
+    add_section_header("6. Plano de Rollback")
+    draw_full_width_table("plano_rollback", 12)
 
-    # Impactos Previstos (A32:A35 merged label)
-    sec3b_rows = 3
-    block_h = sec3b_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + TEXT_OFFSET_X, y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 "Impactos Previstos")
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("impactos_previstos"),
-                       x0 + COL_A_W + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec3b_rows)
+    add_section_header("7. Validação após mudança")
+    draw_full_width_table("validacao_pos_mudanca", 14)
 
-    # Tempo de Indisponibilidade (A36:A38 merged label, 3 rows)
-    sec3c_rows = 2
-    block_h = sec3c_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + TEXT_OFFSET_X, y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 "Tempo de Indisponibilidade")
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    c.setFont(font_regular, VALUE_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + COL_A_W + TEXT_OFFSET_X,
-                 y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 get("tempo_indisponibilidade"))
-
-    y -= SECTION_GAP
-
-    # ═══════════════════════════════════════════════════════════════════
-    # SEÇÃO 4: Escopo Técnico
-    # ═══════════════════════════════════════════════════════════════════
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("4. Escopo Técnico", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "4. Escopo Técnico")
-
-    # Escopo técnico Aplicado (A41:A47 = 7 rows)
-    sec4a_rows = 5
-    block_h = sec4a_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + TEXT_OFFSET_X, y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 "Escopo técnico Aplicado")
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("escopo_tecnico"),
-                       x0 + COL_A_W + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec4a_rows)
-
-    # Regras aplicadas (A48:A50 = 3 rows)
-    sec4b_rows = 2
-    block_h = sec4b_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + TEXT_OFFSET_X, y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 "Regras aplicadas")
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("regras_aplicadas"),
-                       x0 + COL_A_W + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec4b_rows)
-
-    # Alterações em estruturas (A51:A57 = 7 rows)
-    sec4c_rows = 5
-    block_h = sec4c_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, COL_A_W, block_h, LABEL_BG)
-    c.setFont(font_bold, LABEL_FONT_SIZE)
-    c.setFillColor(BLACK)
-    c.drawString(x0 + TEXT_OFFSET_X, y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                 "Alterações em estruturas")
-    _draw_rect(c, x0 + COL_A_W, y, COL_B_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("alteracoes_estruturas"),
-                       x0 + COL_A_W + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec4c_rows)
-
-    y -= SECTION_GAP
-
-    # ═══════════════════════════════════════════════════════════════════
-    # SEÇÃO 5: Plano de Implementação
-    # ═══════════════════════════════════════════════════════════════════
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("5. Plano de Implementação", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "5. Plano de Implementação")
-
-    # Texto livre (rows 60-75 = 16 rows merged A:B)
-    sec5_rows = 12
-    block_h = sec5_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, FULL_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("plano_implementacao"),
-                       x0 + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       FULL_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec5_rows)
-
-    y -= SECTION_GAP
-
-    # ═══════════════════════════════════════════════════════════════════
-    # SEÇÃO 6: Plano de Rollback
-    # ═══════════════════════════════════════════════════════════════════
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("6. Plano de Rollback", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "6. Plano de Rollback")
-
-    # Texto livre (rows 77-91 = 15 rows merged A:B)
-    sec6_rows = 12
-    block_h = sec6_rows * TEXTAREA_ROW_H
-    y -= block_h
-    _draw_rect(c, x0, y, FULL_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("plano_rollback"),
-                       x0 + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       FULL_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec6_rows)
-
-    y -= SECTION_GAP
-
-    # ═══════════════════════════════════════════════════════════════════
-    # SEÇÃO 7: Validação após mudança
-    # ═══════════════════════════════════════════════════════════════════
-    y -= HEADER_H
-    _draw_rect(c, x0, y, FULL_W, HEADER_H, HEADER_BG, border=True, border_weight=1)
-    c.setFont(font_bold, HEADER_FONT_SIZE)
-    c.setFillColor(WHITE)
-    text_w = c.stringWidth("7. Validação após mudança", font_bold, HEADER_FONT_SIZE)
-    c.drawString(x0 + (FULL_W - text_w) / 2, y + TEXT_OFFSET_Y, "7. Validação após mudança")
-
-    # Texto livre (rows 93-106 = 14 rows merged A:B)
-    # Usar o espaço restante até a margem inferior
-    remaining_h = y - MARGIN_B
-    sec7_rows = max(3, int(remaining_h / TEXTAREA_ROW_H))
-    block_h = remaining_h
-    y -= block_h
-    _draw_rect(c, x0, y, FULL_W, block_h, VALUE_BG)
-    _draw_wrapped_text(c, get("validacao_pos_mudanca"),
-                       x0 + TEXT_OFFSET_X,
-                       y + block_h - TEXTAREA_ROW_H + TEXT_OFFSET_Y,
-                       font_regular, VALUE_FONT_SIZE,
-                       FULL_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=sec7_rows)
-
-    c.save()
+    doc.build(elements)
+    
     pdf_bytes = buffer.getvalue()
     buffer.close()
     return filename, pdf_bytes
