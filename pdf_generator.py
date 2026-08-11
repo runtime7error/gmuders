@@ -65,13 +65,10 @@ def _draw_text(c, text, x, y, font, size, color=BLACK, max_width=None):
     c.drawString(x, y, text)
 
 
-def _draw_wrapped_text(c, text, x, y, font, size, max_width, line_height, max_lines=50):
-    """Desenha texto com quebra de linha. Retorna y final."""
+def _get_wrapped_lines(c, text, font, size, max_width):
     c.setFont(font, size)
-    c.setFillColor(BLACK)
-
     lines = []
-    for paragraph in text.split("\n"):
+    for paragraph in str(text).split("\n"):
         if not paragraph.strip():
             lines.append("")
             continue
@@ -88,7 +85,13 @@ def _draw_wrapped_text(c, text, x, y, font, size, max_width, line_height, max_li
                 lines.append(current_line)
                 current_line = word
         lines.append(current_line)
+    return lines
 
+
+def _draw_wrapped_text(c, text, x, y, font, size, max_width, line_height, max_lines=50):
+    """Desenha texto com quebra de linha. Retorna y final."""
+    lines = _get_wrapped_lines(c, text, font, size, max_width)
+    c.setFillColor(BLACK)
     cur_y = y
     for i, line in enumerate(lines[:max_lines]):
         c.drawString(x, cur_y, line)
@@ -187,15 +190,22 @@ def generate_pdf(data: dict, output_dir: str = None) -> tuple:
     ]
 
     for label, value in sec1_fields:
-        y -= ROW_H
+        val_lines = _get_wrapped_lines(c, value, font_regular, VALUE_FONT_SIZE, COL_B_W - 2 * TEXT_OFFSET_X)
+        lbl_lines = _get_wrapped_lines(c, label, font_bold, LABEL_FONT_SIZE, COL_A_W - 2 * TEXT_OFFSET_X)
+        
+        num_lines = max(1, max(len(val_lines), len(lbl_lines)))
+        dynamic_row_h = num_lines * LINE_H + (ROW_H - LINE_H)
+        
+        y -= dynamic_row_h
+        
         # Label cell
-        _draw_rect(c, x0, y, COL_A_W, ROW_H, LABEL_BG)
-        _draw_text(c, label, x0 + TEXT_OFFSET_X, y + TEXT_OFFSET_Y,
-                   font_bold, LABEL_FONT_SIZE, BLACK, COL_A_W - 2 * TEXT_OFFSET_X)
+        _draw_rect(c, x0, y, COL_A_W, dynamic_row_h, LABEL_BG)
+        _draw_wrapped_text(c, label, x0 + TEXT_OFFSET_X, y + dynamic_row_h - ROW_H + TEXT_OFFSET_Y,
+                           font_bold, LABEL_FONT_SIZE, COL_A_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=num_lines)
         # Value cell
-        _draw_rect(c, x0 + COL_A_W, y, COL_B_W, ROW_H, VALUE_BG)
-        _draw_text(c, value, x0 + COL_A_W + TEXT_OFFSET_X, y + TEXT_OFFSET_Y,
-                   font_regular, VALUE_FONT_SIZE, BLACK, COL_B_W - 2 * TEXT_OFFSET_X)
+        _draw_rect(c, x0 + COL_A_W, y, COL_B_W, dynamic_row_h, VALUE_BG)
+        _draw_wrapped_text(c, value, x0 + COL_A_W + TEXT_OFFSET_X, y + dynamic_row_h - ROW_H + TEXT_OFFSET_Y,
+                           font_regular, VALUE_FONT_SIZE, COL_B_W - 2 * TEXT_OFFSET_X, LINE_H, max_lines=num_lines)
 
     y -= SECTION_GAP
 
